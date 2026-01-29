@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from geopy.distance import geodesic
-from visualisation.map import plot_route_map, generate_direct_route, add_direct_route
+from visualisation.map import plot_route_map, generate_direct_route
 
 # Airport coordinates (lat, lon) for major Indian airports
 AIRPORT_COORDINATES = {
@@ -283,7 +283,7 @@ if dep_coords and arr_coords:
             arr_name=arr_code
         )
     elif show_straight_route:
-        # Show direct route
+        # Show direct route with straight-line interpolation
         direct_coords = generate_direct_route(dep_coords, arr_coords, num_points=100)
         
         fig_default.add_trace(go.Scattergeo(
@@ -295,43 +295,19 @@ if dep_coords and arr_coords:
             hoverinfo="skip"
         ))
         
-        # Add directional arrows
-        num_arrows = 3
-        arrow_indices = np.linspace(0, len(direct_coords)-1, num_arrows, dtype=int)
-        
-        for i in range(len(arrow_indices)-1):
-            idx = arrow_indices[i]
-            lat1, lon1 = direct_coords[idx][0], direct_coords[idx][1]
-            lat2, lon2 = direct_coords[arrow_indices[i+1]][0], direct_coords[arrow_indices[i+1]][1]
-            
-            fig_default.add_annotation(
-                x=lon1,
-                y=lat1,
-                ax=lon2,
-                ay=lat2,
-                xref="x",
-                yref="y",
-                axref="x",
-                ayref="y",
-                showarrow=True,
-                arrowhead=2,
-                arrowsize=2,
-                arrowwidth=2,
-                arrowcolor="darkgreen",
-                opacity=0.6
-            )
-        
-        # Add markers
+        # Add airport markers with coordinates displayed
         fig_default.add_trace(go.Scattergeo(
             lat=[dep_coords[0], arr_coords[0]],
             lon=[dep_coords[1], arr_coords[1]],
             mode="markers+text",
             marker=dict(size=16, color=["green", "red"], symbol="star"),
-            text=[f"<b>{dep_code}</b><br>Start", f"<b>{arr_code}</b><br>End"],
+            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)", 
+                  f"<b>{arr_code}</b><br>({arr_coords[0]:.4f}°, {arr_coords[1]:.4f}°)"],
             textposition=["top center", "bottom center"],
+            textfont=dict(size=11),
             name="Airports",
-            hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.2f}<br>Lon: {dep_coords[1]:.2f}",
-                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.2f}<br>Lon: {arr_coords[1]:.2f}"],
+            hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.4f}<br>Lon: {dep_coords[1]:.4f}",
+                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.4f}<br>Lon: {arr_coords[1]:.4f}"],
             hoverinfo="text"
         ))
         
@@ -358,36 +334,32 @@ if dep_coords and arr_coords:
             hovermode="closest"
         )
     else:
-        # Default: show just departure and arrival points with arrow
+        # Default: show departure and arrival with straight-line interpolation
         
-        # Add arrow from departure to arrival
-        fig_default.add_annotation(
-            x=dep_coords[1],
-            y=dep_coords[0],
-            ax=arr_coords[1],
-            ay=arr_coords[0],
-            xref="x",
-            yref="y",
-            axref="x",
-            ayref="y",
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=3,
-            arrowwidth=2,
-            arrowcolor="blue",
-            opacity=0.5
-        )
+        # Add straight-line between airports
+        direct_coords = generate_direct_route(dep_coords, arr_coords, num_points=50)
+        fig_default.add_trace(go.Scattergeo(
+            lat=[p[0] for p in direct_coords],
+            lon=[p[1] for p in direct_coords],
+            mode="lines",
+            line=dict(width=2, color="rgba(100, 100, 200, 0.4)", dash="dash"),
+            name="Direct Path",
+            hoverinfo="skip"
+        ))
         
+        # Add airport markers with coordinates displayed
         fig_default.add_trace(go.Scattergeo(
             lat=[dep_coords[0], arr_coords[0]],
             lon=[dep_coords[1], arr_coords[1]],
             mode="markers+text",
             marker=dict(size=18, color=["green", "red"], symbol="star"),
-            text=[f"<b>{dep_code}</b><br>Departure", f"<b>{arr_code}</b><br>Arrival"],
+            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)", 
+                  f"<b>{arr_code}</b><br>({arr_coords[0]:.4f}°, {arr_coords[1]:.4f}°)"],
             textposition=["top center", "bottom center"],
+            textfont=dict(size=12, color=["Black", "Black"]),
             name="Airports",
-            hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.2f}<br>Lon: {dep_coords[1]:.2f}",
-                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.2f}<br>Lon: {arr_coords[1]:.2f}"],
+            hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.4f}<br>Lon: {dep_coords[1]:.4f}",
+                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.4f}<br>Lon: {arr_coords[1]:.4f}"],
             hoverinfo="text"
         ))
         
@@ -417,65 +389,8 @@ if dep_coords and arr_coords:
     # Display the map
     st.plotly_chart(fig_default, use_container_width=True)
     
-    st.markdown("---")
-    
-    # Show direct route
-    if show_straight_route:
-        st.subheader("📍 Direct Route (Straight Line)")
-        direct_coords = generate_direct_route(dep_coords, arr_coords, num_points=100)
-        
-        fig_direct = go.Figure()
-        
-        # Direct route line
-        fig_direct.add_trace(go.Scattergeo(
-            lat=[p[0] for p in direct_coords],
-            lon=[p[1] for p in direct_coords],
-            mode="lines",
-            line=dict(width=2, color="green", dash="dash"),
-            name="Direct Route",
-            hoverinfo="skip"
-        ))
-        
-        # Start and end markers
-        fig_direct.add_trace(go.Scattergeo(
-            lat=[dep_coords[0], arr_coords[0]],
-            lon=[dep_coords[1], arr_coords[1]],
-            mode="markers+text",
-            marker=dict(size=16, color=["green", "red"], symbol="star"),
-            text=[f"<b>{dep_code}</b><br>Start", f"<b>{arr_code}</b><br>End"],
-            textposition=["top center", "bottom center"],
-            name="Airports",
-            hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.2f}<br>Lon: {dep_coords[1]:.2f}",
-                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.2f}<br>Lon: {arr_coords[1]:.2f}"],
-            hoverinfo="text"
-        ))
-        
-        center_lat = (dep_coords[0] + arr_coords[0]) / 2
-        center_lon = (dep_coords[1] + arr_coords[1]) / 2
-        
-        fig_direct.update_layout(
-            title=f"✈️ Direct Route: {dep_code} → {arr_code}",
-            geo=dict(
-                scope="asia",
-                projection_type="mercator",
-                showland=True,
-                landcolor="rgb(243, 243, 243)",
-                showocean=True,
-                oceancolor="rgb(230, 245, 255)",
-                showcountries=True,
-                countrycolor="rgb(200, 200, 200)",
-                center=dict(lat=center_lat, lon=center_lon),
-                projection_scale=4
-            ),
-            height=600,
-            margin=dict(l=0, r=0, t=50, b=0),
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
-            hovermode="closest"
-        )
-        st.plotly_chart(fig_direct, use_container_width=True)
-        
         # Show distance
-        st.info(f"✈️ Direct distance: **{distance:.2f} km**")
+    st.info(f"✈️ Direct distance: **{distance:.2f} km**")
     
     # Show optimized route
     if show_optimized_route:

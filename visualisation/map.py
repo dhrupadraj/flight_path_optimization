@@ -25,32 +25,17 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         hoverinfo="skip"
     ))
 
-    # Add directional arrows along the route
-    num_arrows = 5
-    arrow_indices = np.linspace(0, len(lats)-1, num_arrows, dtype=int)
-    
-    for i in range(len(arrow_indices)-1):
-        idx = arrow_indices[i]
-        lat1, lon1 = lats[idx], lons[idx]
-        lat2, lon2 = lats[arrow_indices[i+1]], lons[arrow_indices[i+1]]
-        
-        # Add arrow annotation
-        fig.add_annotation(
-            x=lon1,
-            y=lat1,
-            ax=lon2,
-            ay=lat2,
-            xref="x",
-            yref="y",
-            axref="x",
-            ayref="y",
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=2,
-            arrowwidth=2,
-            arrowcolor="darkblue",
-            opacity=0.6
-        )
+    # Straight-line interpolation between departure and arrival
+    straight_lats = np.linspace(lats[0], lats[-1], 50)
+    straight_lons = np.linspace(lons[0], lons[-1], 50)
+    fig.add_trace(go.Scattergeo(
+        lat=straight_lats,
+        lon=straight_lons,
+        mode="lines",
+        line=dict(width=2, color="rgba(100, 200, 100, 0.5)", dash="dash"),
+        name="Straight Line",
+        hoverinfo="skip"
+    ))
 
     # Waypoints
     fig.add_trace(go.Scattergeo(
@@ -66,28 +51,30 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         name="Waypoints"
     ))
 
-    # Departure (Green)
+    # Departure (Green) with coordinates displayed
     fig.add_trace(go.Scattergeo(
         lat=[lats[0]],
         lon=[lons[0]],
         mode="markers+text",
         marker=dict(size=18, color="green", symbol="star"),
-        text=f"<b>{dep_name}</b><br>Departure",
+        text=f"<b>{dep_name}</b><br>({lats[0]:.4f}°, {lons[0]:.4f}°)",
         textposition="top center",
-        hovertext=f"<b>Departure Airport: {dep_name}</b><br>Lat: {lats[0]:.2f}<br>Lon: {lons[0]:.2f}",
+        textfont=dict(size=11, color="darkgreen"),
+        hovertext=f"<b>Departure: {dep_name}</b><br>Lat: {lats[0]:.4f}<br>Lon: {lons[0]:.4f}",
         hoverinfo="text",
         name=f"Departure ({dep_name})"
     ))
 
-    # Arrival (Red)
+    # Arrival (Red) with coordinates displayed
     fig.add_trace(go.Scattergeo(
         lat=[lats[-1]],
         lon=[lons[-1]],
         mode="markers+text",
         marker=dict(size=18, color="red", symbol="star"),
-        text=f"<b>{arr_name}</b><br>Arrival",
-        textposition="top center",
-        hovertext=f"<b>Arrival Airport: {arr_name}</b><br>Lat: {lats[-1]:.2f}<br>Lon: {lons[-1]:.2f}",
+        text=f"<b>{arr_name}</b><br>({lats[-1]:.4f}°, {lons[-1]:.4f}°)",
+        textposition="bottom center",
+        textfont=dict(size=11, color="darkred"),
+        hovertext=f"<b>Arrival: {arr_name}</b><br>Lat: {lats[-1]:.4f}<br>Lon: {lons[-1]:.4f}",
         hoverinfo="text",
         name=f"Arrival ({arr_name})"
     ))
@@ -130,12 +117,3 @@ def generate_direct_route(start, end, num_points=100):
     lats = np.linspace(start[0], end[0], num_points)
     lons = np.linspace(start[1], end[1], num_points)
     return list(zip(lats, lons))
-
-def add_direct_route(fig, direct_coords):
-    fig.add_trace(go.Scattergeo(
-        lat=[p[0] for p in direct_coords],
-        lon=[p[1] for p in direct_coords],
-        mode="lines",
-        line=dict(width=2, dash="dash", color="green"),
-        name="Direct Route"
-    ))
