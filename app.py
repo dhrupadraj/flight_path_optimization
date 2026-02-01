@@ -2,7 +2,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 from geopy.distance import geodesic
-from visualisation.map import plot_route_map, generate_direct_route
+import requests
+from visualisation.map import plot_route_map, generate_direct_route, create_wind_heatmap_and_vectors
 
 # Airport coordinates (lat, lon) for major Indian airports
 AIRPORT_COORDINATES = {
@@ -222,6 +223,23 @@ wind_weight = st.sidebar.slider(
     help="Higher value prioritizes tailwinds"
 )
 
+# Wind visualization toggle
+show_wind_field = st.sidebar.checkbox(
+    "Show Wind Field & Vectors",
+    value=True,
+    help="Display wind speed heatmap and vector field"
+)
+
+# Wind grid resolution
+wind_grid_size = st.sidebar.slider(
+    "Wind Grid Resolution",
+    min_value=10,
+    max_value=40,
+    value=20,
+    step=5,
+    help="Higher = more detailed wind field"
+)
+
 # -----------------------------
 # Sidebar: Actions
 # -----------------------------
@@ -271,17 +289,43 @@ if dep_coords and arr_coords:
     
     # Determine which route to show
     if show_optimized_route:
-        # Show optimized route with waypoints
-        num_points = 200
-        optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=num_points)
+        # Call FastAPI to compute optimized route using model + A* (expecting local server at 127.0.0.1:8000)
+        api_url = "http://127.0.0.1:8000/optimize-route"
+        payload = {
+            "dep_lat": dep_coords[0],
+            "dep_lon": dep_coords[1],
+            "arr_lat": arr_coords[0],
+            "arr_lon": arr_coords[1],
+        }
+
+        with st.spinner("Computing optimized route using model and A*..."):
+            try:
+                resp = requests.post(api_url, json=payload, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                # API returns optimized_route as [{"lat": x, "lon": y}, ...]; convert to [(lat, lon), ...]
+                route_points = data.get("optimized_route", [])
+                optimized_coords = [(p["lat"], p["lon"]) for p in route_points] if route_points else []
+            except Exception as e:
+                st.error(f"Failed to fetch optimized route: {e}")
+                optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=200)
+
+        # If API returned an empty route, fall back to straight interpolation
+        if not optimized_coords:
+            optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=200)
+
         waypoints = generate_waypoints(dep_coords, arr_coords, num_waypoints=5)
-        
+
         fig_default = plot_route_map(
             route_coords=optimized_coords,
             waypoints=waypoints,
             dep_name=dep_code,
             arr_name=arr_code
         )
+
+        # Add wind field if enabled
+        if show_wind_field:
+            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
     elif show_straight_route:
         # Show direct route with straight-line interpolation
         direct_coords = generate_direct_route(dep_coords, arr_coords, num_points=100)
@@ -333,6 +377,10 @@ if dep_coords and arr_coords:
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
             hovermode="closest"
         )
+        
+        # Add wind field if enabled
+        if show_wind_field:
+            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
     else:
         # Default: show departure and arrival with straight-line interpolation
         
@@ -353,13 +401,13 @@ if dep_coords and arr_coords:
             lon=[dep_coords[1], arr_coords[1]],
             mode="markers+text",
             marker=dict(size=18, color=["green", "red"], symbol="star"),
-            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)", 
-                  f"<b>{arr_code}</b><br>({arr_coords[0]:.4f}°, {arr_coords[1]:.4f}°)"],
+            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)",
+                f"<b>{arr_code}</b><br>({arr_coords[0]:.4f}°, {arr_coords[1]:.4f}°)"],
             textposition=["top center", "bottom center"],
             textfont=dict(size=12, color=["Black", "Black"]),
             name="Airports",
             hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.4f}<br>Lon: {dep_coords[1]:.4f}",
-                      f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.4f}<br>Lon: {arr_coords[1]:.4f}"],
+                    f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.4f}<br>Lon: {arr_coords[1]:.4f}"],
             hoverinfo="text"
         ))
         
@@ -385,6 +433,10 @@ if dep_coords and arr_coords:
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
             hovermode="closest"
         )
+        
+        # Add wind field if enabled
+        if show_wind_field:
+            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
     
     # Display the map
     st.plotly_chart(fig_default, use_container_width=True)
@@ -392,16 +444,13 @@ if dep_coords and arr_coords:
         # Show distance
     st.info(f"✈️ Direct distance: **{distance:.2f} km**")
     
-    # Show optimized route
+    # Show optimized route details (reuse optimized_coords from API already plotted above)
     if show_optimized_route:
         st.subheader("🛤️ Optimized Route with Waypoints")
-        st.write(f"Route from **{dep_code}** to **{arr_code}** with {len(waypoints)-2} waypoints")
+        num_waypoints_display = max(0, len(optimized_coords) - 2)  # exclude dep/arr
+        st.write(f"Route from **{dep_code}** to **{arr_code}** with {num_waypoints_display} waypoints")
         
-        # Generate optimized route (interpolated path with waypoints)
-        num_points = 200
-        optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=num_points)
-        
-        # Generate waypoints for display
+        # waypoints already set above from API result; use for details
         waypoints = generate_waypoints(dep_coords, arr_coords, num_waypoints=5)
         
         # Create the optimized route map
@@ -411,6 +460,10 @@ if dep_coords and arr_coords:
             dep_name=dep_code,
             arr_name=arr_code
         )
+        
+        # Add wind field if enabled
+        if show_wind_field:
+            create_wind_heatmap_and_vectors(fig_opt, dep_coords, arr_coords, grid_size=wind_grid_size)
         
         st.plotly_chart(fig_opt, use_container_width=True)
         
