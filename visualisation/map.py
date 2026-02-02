@@ -59,19 +59,28 @@ def _wind_direction_label(deg):
     return labels[idx]
 
 
-def create_wind_heatmap_and_vectors(fig, dep_coords, arr_coords, grid_size=28):
+def create_wind_heatmap_and_vectors(fig, dep_coords, arr_coords, grid_size=28, wind_data=None):
     """
     Add a single combined wind layer: one semi-transparent heatmap + vectors on top,
     inserted at the start of the figure so the route is drawn on top and stays visible.
+    If wind_data is provided (from ERA5/GRIB via API), use it; otherwise use synthetic wind.
+    wind_data: dict with keys 'wind_u', 'wind_v', 'lat_grid', 'lon_grid' (lists/arrays).
     """
-    lat_min = min(dep_coords[0], arr_coords[0]) - 2.0
-    lat_max = max(dep_coords[0], arr_coords[0]) + 2.0
-    lon_min = min(dep_coords[1], arr_coords[1]) - 2.0
-    lon_max = max(dep_coords[1], arr_coords[1]) + 2.0
-
-    u, v, wind_speed, lat_mesh, lon_mesh = generate_synthetic_wind_field(
-        lat_min, lat_max, lon_min, lon_max, grid_size
-    )
+    if wind_data is not None:
+        u = np.asarray(wind_data["wind_u"], dtype=np.float64)
+        v = np.asarray(wind_data["wind_v"], dtype=np.float64)
+        lat_1d = np.asarray(wind_data["lat_grid"])
+        lon_1d = np.asarray(wind_data["lon_grid"])
+        lon_mesh, lat_mesh = np.meshgrid(lon_1d, lat_1d)
+        wind_speed = np.sqrt(u**2 + v**2)
+    else:
+        lat_min = min(dep_coords[0], arr_coords[0]) - 2.0
+        lat_max = max(dep_coords[0], arr_coords[0]) + 2.0
+        lon_min = min(dep_coords[1], arr_coords[1]) - 2.0
+        lon_max = max(dep_coords[1], arr_coords[1]) + 2.0
+        u, v, wind_speed, lat_mesh, lon_mesh = generate_synthetic_wind_field(
+            lat_min, lat_max, lon_min, lon_max, grid_size
+        )
     wind_speed_min, wind_speed_max = wind_speed.min(), wind_speed.max()
     if wind_speed_max <= wind_speed_min:
         wind_speed_max = wind_speed_min + 1.0

@@ -292,6 +292,25 @@ distance = calculate_distance(dep_coords[0], dep_coords[1], arr_coords[0], arr_c
 st.title("✈️ Flight Route Optimization System")
 
 if dep_coords and arr_coords:
+    # Fetch ERA5 (data.grib) wind field for map when wind overlay is enabled
+    wind_data = None
+    if show_wind_field:
+        try:
+            wind_resp = requests.post(
+                "http://127.0.0.1:8000/wind-field",
+                json={
+                    "dep_lat": dep_coords[0],
+                    "dep_lon": dep_coords[1],
+                    "arr_lat": arr_coords[0],
+                    "arr_lon": arr_coords[1],
+                },
+                timeout=15,
+            )
+            wind_resp.raise_for_status()
+            wind_data = wind_resp.json()
+        except Exception:
+            wind_data = None  # fall back to synthetic in create_wind_heatmap_and_vectors
+
     # Display flight information in better layout
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -347,9 +366,12 @@ if dep_coords and arr_coords:
             arr_name=arr_code
         )
 
-        # Add wind field if enabled
+        # Add wind field if enabled (ERA5 from API or synthetic fallback)
         if show_wind_field:
-            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
+            create_wind_heatmap_and_vectors(
+                fig_default, dep_coords, arr_coords,
+                grid_size=wind_grid_size, wind_data=wind_data
+            )
     elif show_straight_route:
         # Show direct route with straight-line interpolation
         direct_coords = generate_direct_route(dep_coords, arr_coords, num_points=100)
@@ -402,9 +424,12 @@ if dep_coords and arr_coords:
             hovermode="closest"
         )
         
-        # Add wind field if enabled
+        # Add wind field if enabled (ERA5 from API or synthetic fallback)
         if show_wind_field:
-            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
+            create_wind_heatmap_and_vectors(
+                fig_default, dep_coords, arr_coords,
+                grid_size=wind_grid_size, wind_data=wind_data
+            )
     else:
         # Default: show departure and arrival with straight-line interpolation
         
@@ -458,9 +483,12 @@ if dep_coords and arr_coords:
             hovermode="closest"
         )
         
-        # Add wind field if enabled
+        # Add wind field if enabled (ERA5 from API or synthetic fallback)
         if show_wind_field:
-            create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
+            create_wind_heatmap_and_vectors(
+                fig_default, dep_coords, arr_coords,
+                grid_size=wind_grid_size, wind_data=wind_data
+            )
     
     # Display the map
     st.plotly_chart(fig_default, use_container_width=True, key="route_map_main")
@@ -485,9 +513,12 @@ if dep_coords and arr_coords:
             arr_name=arr_code
         )
         
-        # Add wind field if enabled
+        # Add wind field if enabled (ERA5 from API or synthetic fallback)
         if show_wind_field:
-            create_wind_heatmap_and_vectors(fig_opt, dep_coords, arr_coords, grid_size=wind_grid_size)
+            create_wind_heatmap_and_vectors(
+                fig_opt, dep_coords, arr_coords,
+                grid_size=wind_grid_size, wind_data=wind_data
+            )
         
         st.plotly_chart(fig_opt, use_container_width=True, key="route_map_optimized_details")
         
