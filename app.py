@@ -103,6 +103,30 @@ def generate_waypoints(start_coords, end_coords, num_waypoints=5):
     
     return waypoints
 
+
+def generate_waypoints_from_route(route_coords, num_waypoints=5):
+    """Generate waypoints evenly spaced along an existing route (e.g. optimized path)."""
+    if not route_coords or len(route_coords) < 2:
+        start = route_coords[0] if route_coords else (0.0, 0.0)
+        end = route_coords[-1] if len(route_coords) > 1 else start
+        return generate_waypoints(start, end, num_waypoints=num_waypoints)
+    n = len(route_coords)
+    # Indices for start, num_waypoints intermediate, and end (total num_waypoints+2 points)
+    indices = [0] + [int((i + 1) * (n - 1) / (num_waypoints + 1)) for i in range(num_waypoints)] + [n - 1]
+    indices = sorted(set(indices))  # avoid duplicates if n is small
+    waypoints = []
+    for i, idx in enumerate(indices):
+        lat, lon = route_coords[idx][0], route_coords[idx][1]
+        if i == 0:
+            waypoints.append({"lat": lat, "lon": lon, "name": "Start", "distance_from_prev": 0.0})
+        else:
+            prev = waypoints[-1]
+            dist = calculate_distance(prev["lat"], prev["lon"], lat, lon)
+            name = "End" if i == len(indices) - 1 else f"Waypoint {i}"
+            waypoints.append({"lat": lat, "lon": lon, "name": name, "distance_from_prev": dist})
+    return waypoints
+
+
 # -----------------------------
 # Sidebar: Flight Configuration
 # -----------------------------
@@ -314,7 +338,7 @@ if dep_coords and arr_coords:
         if not optimized_coords:
             optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=200)
 
-        waypoints = generate_waypoints(dep_coords, arr_coords, num_waypoints=5)
+        waypoints = generate_waypoints_from_route(optimized_coords, num_waypoints=5)
 
         fig_default = plot_route_map(
             route_coords=optimized_coords,
@@ -345,10 +369,10 @@ if dep_coords and arr_coords:
             lon=[dep_coords[1], arr_coords[1]],
             mode="markers+text",
             marker=dict(size=16, color=["green", "red"], symbol="star"),
-            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)", 
+            text=[f"<b>{dep_code}</b><br>({dep_coords[0]:.4f}°, {dep_coords[1]:.4f}°)",
                   f"<b>{arr_code}</b><br>({arr_coords[0]:.4f}°, {arr_coords[1]:.4f}°)"],
             textposition=["top center", "bottom center"],
-            textfont=dict(size=11),
+            textfont=dict(size=11, color="black"),
             name="Airports",
             hovertext=[f"<b>Departure: {dep_code}</b><br>Lat: {dep_coords[0]:.4f}<br>Lon: {dep_coords[1]:.4f}",
                       f"<b>Arrival: {arr_code}</b><br>Lat: {arr_coords[0]:.4f}<br>Lon: {arr_coords[1]:.4f}"],
@@ -374,7 +398,7 @@ if dep_coords and arr_coords:
             ),
             height=600,
             margin=dict(l=0, r=0, t=50, b=0),
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)", font=dict(color="black")),
             hovermode="closest"
         )
         
@@ -430,7 +454,7 @@ if dep_coords and arr_coords:
             ),
             height=600,
             margin=dict(l=0, r=0, t=50, b=0),
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)"),
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.8)", font=dict(color="black")),
             hovermode="closest"
         )
         
@@ -439,7 +463,7 @@ if dep_coords and arr_coords:
             create_wind_heatmap_and_vectors(fig_default, dep_coords, arr_coords, grid_size=wind_grid_size)
     
     # Display the map
-    st.plotly_chart(fig_default, use_container_width=True)
+    st.plotly_chart(fig_default, use_container_width=True, key="route_map_main")
     
         # Show distance
     st.info(f"✈️ Direct distance: **{distance:.2f} km**")
@@ -449,9 +473,9 @@ if dep_coords and arr_coords:
         st.subheader("🛤️ Optimized Route with Waypoints")
         num_waypoints_display = max(0, len(optimized_coords) - 2)  # exclude dep/arr
         st.write(f"Route from **{dep_code}** to **{arr_code}** with {num_waypoints_display} waypoints")
-        
-        # waypoints already set above from API result; use for details
-        waypoints = generate_waypoints(dep_coords, arr_coords, num_waypoints=5)
+
+        # Waypoints on the optimized route (same as main map)
+        waypoints = generate_waypoints_from_route(optimized_coords, num_waypoints=5)
         
         # Create the optimized route map
         fig_opt = plot_route_map(
@@ -465,7 +489,7 @@ if dep_coords and arr_coords:
         if show_wind_field:
             create_wind_heatmap_and_vectors(fig_opt, dep_coords, arr_coords, grid_size=wind_grid_size)
         
-        st.plotly_chart(fig_opt, use_container_width=True)
+        st.plotly_chart(fig_opt, use_container_width=True, key="route_map_optimized_details")
         
         # Display waypoint details
         st.subheader("📍 Waypoint Details")

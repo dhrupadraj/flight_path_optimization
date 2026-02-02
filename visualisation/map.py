@@ -124,10 +124,13 @@ def create_wind_heatmap_and_vectors(fig, dep_coords, arr_coords, grid_size=28):
     # Draw wind layer first so route and waypoints stay on top
     fig.data = [fig.data[-1]] + list(fig.data[:-1])
 
-    # Wind vectors (same colorscale): drawn as annotations, sit on top of heatmap
+    # Wind vectors: line + arrowhead (V) at tip so direction is clear; Scattergeo so zoom/pan with map
     step = max(1, grid_size // 10)
     arrow_scale = 0.2
     min_arrow_deg = 0.3
+    head_ratio = 0.4   # arrowhead back from tip (fraction of shaft length)
+    head_spread = 0.28  # arrowhead half-width (fraction of shaft length)
+    seg_lats, seg_lons = [], []
     for i in range(0, u.shape[0], step):
         for j in range(0, u.shape[1], step):
             lat = float(lat_mesh[i, j])
@@ -143,21 +146,37 @@ def create_wind_heatmap_and_vectors(fig, dep_coords, arr_coords, grid_size=28):
             v_deg = (v_val / mag) * length_deg if mag > 0 else 0
             lat_tip = lat + v_deg
             lon_tip = lon + u_deg
-            t = np.clip((speed - wind_speed_min) / (wind_speed_max - wind_speed_min), 0, 1)
-            color = plotly.colors.sample_colorscale(wind_colorscale, t)[0]
-            fig.add_annotation(
-                x=lon_tip,
-                y=lat_tip,
-                ax=lon,
-                ay=lat,
-                xref="x",
-                yref="y",
-                arrowhead=2,
-                arrowsize=1.2,
-                arrowwidth=1.2,
-                arrowcolor=color,
-                showarrow=True,
+            # Shaft: base -> tip
+            seg_lats.extend([lat, lat_tip, None])
+            seg_lons.extend([lon, lon_tip, None])
+            # Arrowhead (V): direction (dx, dy); perpendicular left = (-dy, dx), right = (dy, -dx)
+            dx = (lon_tip - lon) / length_deg if length_deg > 0 else 0
+            dy = (lat_tip - lat) / length_deg if length_deg > 0 else 0
+            back = head_ratio * length_deg
+            side = head_spread * length_deg
+            # Left wing: tip -> tip - back*(dx,dy) + side*(-dy, dx)
+            lon_L = lon_tip - back * dx - side * dy
+            lat_L = lat_tip - back * dy + side * dx
+            seg_lats.extend([lat_tip, lat_L, None])
+            seg_lons.extend([lon_tip, lon_L, None])
+            # Right wing: tip -> tip - back*(dx,dy) - side*(-dy, dx)
+            lon_R = lon_tip - back * dx + side * dy
+            lat_R = lat_tip - back * dy - side * dx
+            seg_lats.extend([lat_tip, lat_R, None])
+            seg_lons.extend([lon_tip, lon_R, None])
+    if seg_lats:
+        fig.add_trace(
+            go.Scattergeo(
+                lat=seg_lats,
+                lon=seg_lons,
+                mode="lines",
+                line=dict(width=1.4, color="rgba(0, 80, 160, 0.75)"),
+                hoverinfo="skip",
+                showlegend=False,
             )
+        )
+        # Insert vectors after heatmap (index 0) so order is: heatmap, vectors, route
+        fig.data = [fig.data[0], fig.data[-1]] + list(fig.data[1:-1])
 
 def plot_route_map(route_coords, waypoints, dep_name, arr_name):
     lats = [p[0] for p in route_coords]
@@ -206,7 +225,7 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         marker=dict(size=8, color="orange", symbol="diamond"),
         text=[wp["name"] for wp in waypoints],
         textposition="top center",
-        textfont=dict(size=10),
+        textfont=dict(size=10, color="black"),
         hovertext=wp_text,
         hoverinfo="text+name",
         name="Waypoints"
@@ -219,6 +238,7 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         marker=dict(size=16, color="green", symbol="star"),
         text=f"<b>{dep_name}</b><br>({lats[0]:.2f}°, {lons[0]:.2f}°)",
         textposition="top center",
+        textfont=dict(color="black"),
         hoverinfo="text", name="Departure"
     ))
     fig.add_trace(go.Scattergeo(
@@ -227,6 +247,7 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         marker=dict(size=16, color="red", symbol="star"),
         text=f"<b>{arr_name}</b><br>({lats[-1]:.2f}°, {lons[-1]:.2f}°)",
         textposition="bottom center",
+        textfont=dict(color="black"),
         hoverinfo="text", name="Arrival"
     ))
 
@@ -254,7 +275,7 @@ def plot_route_map(route_coords, waypoints, dep_name, arr_name):
         ),
         height=580,
         margin=dict(l=0, r=0, t=50, b=0),
-        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.015, bgcolor="rgba(247,247,247,0.9)"),
+        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.015, bgcolor="rgba(247,247,247,0.9)", font=dict(color="black")),
         hovermode="closest",
         dragmode="zoom"
     )
