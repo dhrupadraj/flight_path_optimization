@@ -209,14 +209,9 @@ arrival_label = st.sidebar.selectbox(
     help="Arrival airport must be different from departure"
 )
 
-# Flight parameters
-st.sidebar.subheader("Flight Parameters")
+# Flight timings
+st.sidebar.subheader("Flight Timings")
 
-cruise_altitude = st.sidebar.selectbox(
-    "Cruise Altitude (ft)",
-    options=[30000, 32000, 34000, 36000, 38000],
-    index=2
-)
 
 departure_time = st.sidebar.time_input(
     "Departure Time (UTC)"
@@ -303,8 +298,10 @@ if dep_coords and arr_coords:
                     "dep_lon": dep_coords[1],
                     "arr_lat": arr_coords[0],
                     "arr_lon": arr_coords[1],
+                    "departure_time": str(departure_time),
+                    "flight_date":str(date)
                 },
-                timeout=15,
+                timeout=250,
             )
             wind_resp.raise_for_status()
             wind_data = wind_resp.json()
@@ -312,15 +309,14 @@ if dep_coords and arr_coords:
             wind_data = None  # fall back to synthetic in create_wind_heatmap_and_vectors
 
     # Display flight information in better layout
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("From", dep_code)
     with col2:
         st.metric("To", arr_code)
     with col3:
         st.metric("Distance", f"{distance:.0f} km")
-    with col4:
-        st.metric("Altitude", f"{cruise_altitude} ft")
+    
     
     st.markdown("---")
     
@@ -339,11 +335,13 @@ if dep_coords and arr_coords:
             "dep_lon": dep_coords[1],
             "arr_lat": arr_coords[0],
             "arr_lon": arr_coords[1],
+            "departure_time": str(departure_time),
+            "flight_date":str(date)
         }
 
         with st.spinner("Computing optimized route using model and A*..."):
             try:
-                resp = requests.post(api_url, json=payload, timeout=30)
+                resp = requests.post(api_url, json=payload, timeout=120)
                 resp.raise_for_status()
                 data = resp.json()
                 # API returns optimized_route as [{"lat": x, "lon": y}, ...]; convert to [(lat, lon), ...]

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import numpy as np
+from datetime import datetime
 
 from model.predrnn_inference import PredRNNInference
 from Astarinference import astar_search
@@ -20,6 +21,8 @@ class RouteRequest(BaseModel):
     dep_lon: float
     arr_lat: float
     arr_lon: float
+    departure_time: str
+    flight_date: str
 
 def get_nearest_index(target_lat, target_lon, lat_grid, lon_grid):
     """Finds the (i, j) grid index closest to the given lat/lon."""
@@ -72,6 +75,8 @@ def wind_field(req: RouteRequest):
 @app.post("/optimize-route")
 def optimize_route(req: RouteRequest):
     try:
+        target_datetime = datetime.strptime(f"{req.flight_date} {req.departure_time}", "%Y-%m-%d %H:%M")
+        
         # =====================================================
         # 1. Generate spatial grid between departure & arrival
         # =====================================================
@@ -109,7 +114,7 @@ def optimize_route(req: RouteRequest):
             from data.grib_loader import get_wind_history_for_region
             wind_history = get_wind_history_for_region(
                 lat_min, lat_max, lon_min, lon_max,
-                target_h=H, target_w=W, num_timesteps=Tin,
+                target_h=H, target_w=W, num_timesteps=Tin, target_datetime=target_datetime
             )
         except Exception:
             u_syn, v_syn, _, _, _ = generate_synthetic_wind_field(

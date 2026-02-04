@@ -4,7 +4,7 @@ Uses same preprocessing as training: 500 hPa u/v, normalization with mean/std.
 """
 import os
 import numpy as np
-
+import xarray as xr
 GRIB_PATH = os.path.join(os.path.dirname(__file__), "data.grib")
 MEAN_PATH = os.path.join(os.path.dirname(__file__), "processed", "mean.npy")
 STD_PATH = os.path.join(os.path.dirname(__file__), "processed", "std.npy")
@@ -17,43 +17,43 @@ _cached_std = None
 
 
 def _load_grib():
-    """Load GRIB and return wind (T, 2, H, W), lat, lon. Cached."""
+    """Load GRIB and return wind (T, 2, H, W), lat, lon, and times. Cached."""
     global _cached_wind
     if _cached_wind is not None:
         return _cached_wind
 
     import xarray as xr
 
+    # Use a context manager (with) to ensure the file closes after reading values
     try:
-        ds = xr.open_dataset(
+        with xr.open_dataset(
             GRIB_PATH,
             engine="cfgrib",
-            backend_kwargs={
-                "filter_by_keys": {"typeOfLevel": "isobaricInhPa", "level": LEVEL},
-            },
-        )
+            backend_kwargs={"filter_by_keys": {"typeOfLevel": "isobaricInhPa", "level": LEVEL}},
+        ) as ds:
+            u = ds["u"].values
+            v = ds["v"].values
+            lat = np.asarray(ds.latitude.values)
+            lon = np.asarray(ds.longitude.values)
+            grib_times = ds.time.values  # Access before closing
     except Exception:
-        ds = xr.open_dataset(
-            GRIB_PATH,
-            engine="cfgrib",
-            backend_kwargs={"filter_by_keys": {"typeOfLevel": "isobaricInhPa"}},
-        )
-    u = ds["u"].values  # (T, lat, lon)
-    v = ds["v"].values
-    lat_coord = ds.coords.get("latitude", ds.coords.get("lat", None))
-    lon_coord = ds.coords.get("longitude", ds.coords.get("lon", None))
-    lat = np.asarray(lat_coord.values)
-    lon = np.asarray(lon_coord.values)
-    ds.close()
+        with xr.open_dataset(GRIB_PATH, engine="cfgrib") as ds:
+            u = ds["u"].values
+            v = ds["v"].values
+            lat = np.asarray(ds.latitude.values)
+            lon = np.asarray(ds.longitude.values)
+            grib_times = ds.time.values
 
     u = np.asarray(u, dtype=np.float32)
     v = np.asarray(v, dtype=np.float32)
+    
     if lat[0] > lat[-1]:
         u = u[:, ::-1, :]
         v = v[:, ::-1, :]
         lat = lat[::-1]
+        
     wind = np.stack([u, v], axis=1)  # (T, 2, H, W)
-    _cached_wind = (wind, lat, lon)
+    _cached_wind = (wind, lat, lon, grib_times)
     return _cached_wind
 
 
@@ -100,41 +100,55 @@ def _resample_to_grid(data, src_lat, src_lon, dst_lat, dst_lon):
 
 
 def get_wind_history_for_region(
-    lat_min: float,
-    lat_max: float,
-    lon_min: float,
-    lon_max: float,
-    target_h: int,
-    target_w: int,
-    num_timesteps: int = INPUT_STEPS,
+    lat_min, lat_max, lon_min, lon_max,
+    target_h, target_w,
+    num_timesteps=INPUT_STEPS,
+    target_datetime=None
 ) -> np.ndarray:
-    """
-    Extract wind history from GRIB for the given region, resampled to (target_h, target_w).
-    Returns (Tin, 2, H, W) normalized for PredRNN.
-    Uses the last num_timesteps from the GRIB file.
-    """
-    wind, grib_lat, grib_lon = _load_grib()
+    
+    # 1. Load data
+    wind, grib_lat, grib_lon, grib_times = _load_grib() # Ensure _load_grib returns 4 values!
     mean, std = _load_mean_std()
 
-    # Bounds check
+    # 2. Time Indexing (The 500-Error Fix)
+    if target_datetime is not None:
+        # Force conversion to numpy datetime64[ns] to avoid type errors
+        target_np = np.datetime64(target_datetime)
+        
+        # Calculate index of the closest time
+        time_diffs = np.abs(grib_times - target_np)
+        end_idx = int(np.argmin(time_diffs))
+        
+        # Ensure we get exactly num_timesteps ending at end_idx
+        start_idx = end_idx - num_timesteps + 1
+        
+        if start_idx < 0:
+            # If flight is too early in the dataset, take first available 12
+            wind_slice = wind[0 : num_timesteps]
+        else:
+            wind_slice = wind[start_idx : end_idx + 1]
+    else:
+        wind_slice = wind[-num_timesteps:]
+
+    # 3. Handle data shape (Safety Check)
+    # If the file is shorter than 12 hours total
+    if wind_slice.shape[0] < num_timesteps:
+        diff = num_timesteps - wind_slice.shape[0]
+        padding = np.repeat(wind_slice[:1], diff, axis=0)
+        wind_slice = np.concatenate([padding, wind_slice], axis=0)
+
+    # 4. Spatial Check
     grib_lat_min, grib_lat_max = float(grib_lat.min()), float(grib_lat.max())
     grib_lon_min, grib_lon_max = float(grib_lon.min()), float(grib_lon.max())
-    if lat_min < grib_lat_min or lat_max > grib_lat_max or lon_min < grib_lon_min or lon_max > grib_lon_max:
-        raise ValueError(
-            f"Route region [{lat_min},{lat_max}] x [{lon_min},{lon_max}] "
-            f"outside GRIB domain [{grib_lat_min},{grib_lat_max}] x [{grib_lon_min},{grib_lon_max}]"
-        )
+    
+    if lat_min < grib_lat_min or lat_max > grib_lat_max or \
+       lon_min < grib_lon_min or lon_max > grib_lon_max:
+         raise ValueError(f"Region ({lat_min}, {lon_min}) outside GRIB domain")
 
-    # Target grid
+    # 5. Resampling (Tin, 2, H, W)
     dst_lat = np.linspace(lat_min, lat_max, target_h)
     dst_lon = np.linspace(lon_min, lon_max, target_w)
-
-    # Take last num_timesteps
-    n_total = wind.shape[0]
-    start = max(0, n_total - num_timesteps)
-    wind_slice = wind[start : start + num_timesteps]  # (Tin, 2, H, W)
-
-    # Resample each timestep and channel
+    
     resampled = np.zeros((num_timesteps, 2, target_h, target_w), dtype=np.float32)
     for t in range(num_timesteps):
         for c in range(2):
@@ -142,7 +156,7 @@ def get_wind_history_for_region(
                 wind_slice[t, c], grib_lat, grib_lon, dst_lat, dst_lon
             )
 
-    # Normalize (same as training)
+    # 6. Final Normalization
     norm = (resampled - mean) / (std + 1e-6)
     return norm.astype(np.float32)
 
