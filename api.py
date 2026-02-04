@@ -75,7 +75,12 @@ def wind_field(req: RouteRequest):
 @app.post("/optimize-route")
 def optimize_route(req: RouteRequest):
     try:
-        target_datetime = datetime.strptime(f"{req.flight_date} {req.departure_time}", "%Y-%m-%d %H:%M")
+        # Streamlit time_input usually sends HH:MM:SS, but be tolerant of HH:MM too.
+        dt_str = f"{req.flight_date} {req.departure_time}"
+        try:
+            target_datetime = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            target_datetime = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
         
         # =====================================================
         # 1. Generate spatial grid between departure & arrival

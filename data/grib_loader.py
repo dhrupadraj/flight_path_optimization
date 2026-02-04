@@ -178,7 +178,8 @@ def get_wind_field_for_display(
     Get ERA5 (GRIB) wind field for map display: raw u, v in m/s on a regular grid.
     Returns (u, v, lat_mesh, lon_mesh) for the given region. Raises if outside GRIB domain.
     """
-    wind, grib_lat, grib_lon = _load_grib()
+    # _load_grib returns (wind, lat, lon, times)
+    wind, grib_lat, grib_lon, _ = _load_grib()
     grib_lat_min, grib_lat_max = float(grib_lat.min()), float(grib_lat.max())
     grib_lon_min, grib_lon_max = float(grib_lon.min()), float(grib_lon.max())
     if lat_min < grib_lat_min or lat_max > grib_lat_max or lon_min < grib_lon_min or lon_max > grib_lon_max:
