@@ -347,13 +347,6 @@ if dep_coords and arr_coords:
                 # API returns optimized_route as [{"lat": x, "lon": y}, ...]; convert to [(lat, lon), ...]
                 route_points = data.get("optimized_route", [])
                 optimized_coords = [(p["lat"], p["lon"]) for p in route_points] if route_points else []
-                
-                # Show data source information
-                data_source = data.get("data_source", "unknown")
-                if data_source == "era5_grib":
-                    st.success("✓ Using REAL ERA5 wind data for predictions")
-                elif data_source == "synthetic":
-                    st.warning("⚠ Using SYNTHETIC wind data (route may be outside GRIB coverage area)")
             except Exception as e:
                 st.error(f"Failed to fetch optimized route: {e}")
                 optimized_coords = generate_direct_route(dep_coords, arr_coords, num_points=200)

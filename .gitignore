@@ -54,4 +54,4 @@ htmlcov/
 # Project data (large / generated)
 data/data.grib
 data/processed/
-checkpoints/*.pt
+#checkpoints/*.pt

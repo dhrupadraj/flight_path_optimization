@@ -12,7 +12,8 @@ from data.grib_loader import get_wind_history_for_region
 from data.grib_loader import get_wind_field_for_display
 
 app = FastAPI()
-logger = logging.getLogger(__name__)
+# Use uvicorn's error logger so our messages appear in uvicorn logs / log files
+logger = logging.getLogger("uvicorn.error")
 
 # 1. Initialize Model once on startup
 logger.info("Loading PredRNN model...")
@@ -50,7 +51,7 @@ def get_nearest_index(target_lat, target_lon, lat_grid, lon_grid):
 @app.get("/")
 def read_root():
     return {"message": "Fast api is running"}
-@app.get("/health-check")
+@app.get("/health")
 def health_check():
     return {"status": "ok"}
 def get_grib_bounds():
