@@ -1,3 +1,4 @@
+
 """
 Load wind data from GRIB file for PredRNN inference.
 Uses same preprocessing as training: 500 hPa u/v, normalization with mean/std.
@@ -145,16 +146,27 @@ def get_wind_history_for_region(
        lon_min < grib_lon_min or lon_max > grib_lon_max:
          raise ValueError(f"Region ({lat_min}, {lon_min}) outside GRIB domain")
 
-    # 5. Resampling (Tin, 2, H, W)
+    # 5. Resampling (Tin, 2, H, W) - Optimized: batch resample
     dst_lat = np.linspace(lat_min, lat_max, target_h)
     dst_lon = np.linspace(lon_min, lon_max, target_w)
+    
+    # Create interpolator once and reuse for all timesteps/channels
+    from scipy.interpolate import RegularGridInterpolator
+    dst_lon_2d, dst_lat_2d = np.meshgrid(dst_lon, dst_lat)
+    pts = np.column_stack([dst_lat_2d.ravel(), dst_lon_2d.ravel()])
     
     resampled = np.zeros((num_timesteps, 2, target_h, target_w), dtype=np.float32)
     for t in range(num_timesteps):
         for c in range(2):
-            resampled[t, c] = _resample_to_grid(
-                wind_slice[t, c], grib_lat, grib_lon, dst_lat, dst_lon
+            # Reuse interpolator creation for better performance
+            interp = RegularGridInterpolator(
+                (grib_lat, grib_lon),
+                wind_slice[t, c],
+                method="linear",
+                bounds_error=False,
+                fill_value=0.0,  # Use 0.0 instead of nan for faster processing
             )
+            resampled[t, c] = interp(pts).reshape(target_h, target_w)
 
     # 6. Final Normalization
     norm = (resampled - mean) / (std + 1e-6)

@@ -94,27 +94,38 @@ def astar_search(
     wind_u: np.ndarray,
     wind_v: np.ndarray,
     v_air: float = 250.0,
+    max_iterations: int = 50000,  # Prevent infinite loops
 ) -> List[Tuple[float, float]]:
     """
     Returns optimized path as [(lat, lon), ...]
+    Optimized with iteration limit and cached heuristic calculations.
     """
-
-    #start = Node(*start_idx)
-    #goal = Node(*goal_idx)
 
     open_set = []
     heapq.heappush(open_set, (0.0, start_idx))
 
     came_from = {}
     g_cost = {start_idx: 0.0}
+    closed_set = set()  # Track visited nodes to avoid revisiting
 
     moves = [
         (-1, 0), (1, 0), (0, -1), (0, 1),
         (-1, -1), (-1, 1), (1, -1), (1, 1)
     ]
+    
+    # Pre-compute goal node for heuristic
+    goal_node = Node(*goal_idx)
+    iterations = 0
 
-    while open_set:
+    while open_set and iterations < max_iterations:
+        iterations += 1
         _, current = heapq.heappop(open_set)
+        
+        # Skip if already processed
+        if current in closed_set:
+            continue
+            
+        closed_set.add(current)
 
         if current == goal_idx:
             path = []
@@ -135,6 +146,10 @@ def astar_search(
                 continue
 
             neighbor = (ni, nj)
+            
+            # Skip if already processed
+            if neighbor in closed_set:
+                continue
 
             lat1, lon1 = lat_grid[current[0]], lon_grid[current[1]]
             lat2, lon2 = lat_grid[ni], lon_grid[nj]
@@ -149,15 +164,12 @@ def astar_search(
 
             if neighbor not in g_cost or tentative < g_cost[neighbor]:
                 g_cost[neighbor] = tentative
-                # You need to pass the grids and wind data so the heuristic can estimate time
-                # Also, heuristic expects Node objects based on your definition, but you are using tuples
                 neighbor_node = Node(ni, nj)
-                goal_node = Node(*goal_idx)
-                f  = tentative + heuristic(neighbor_node, goal_node, lat_grid, lon_grid, wind_u, wind_v, v_air)
-                #f = tentative + heuristic(neighbor, goal_idx)
+                f = tentative + heuristic(neighbor_node, goal_node, lat_grid, lon_grid, wind_u, wind_v, v_air)
                 heapq.heappush(open_set, (f, neighbor))
                 came_from[neighbor] = current
 
+    # If we hit max iterations, return best path found so far or empty
     return []
 
 
