@@ -292,7 +292,7 @@ if dep_coords and arr_coords:
     if show_wind_field:
         try:
             wind_resp = requests.post(
-                "http://127.0.0.1:8000/wind-field",
+                "http://16.176.208.177:8000/wind-field",
                 json={
                     "dep_lat": dep_coords[0],
                     "dep_lon": dep_coords[1],
@@ -301,7 +301,7 @@ if dep_coords and arr_coords:
                     "departure_time": str(departure_time),
                     "flight_date":str(date)
                 },
-                timeout=250,
+                timeout=600,
             )
             wind_resp.raise_for_status()
             wind_data = wind_resp.json()
@@ -329,7 +329,7 @@ if dep_coords and arr_coords:
     # Determine which route to show
     if show_optimized_route:
         # Call FastAPI to compute optimized route using model + A* (expecting local server at 127.0.0.1:8000)
-        api_url = "http://127.0.0.1:8000/optimize-route"
+        api_url = "http://16.176.208.177:8000/optimize-route"
         payload = {
             "dep_lat": dep_coords[0],
             "dep_lon": dep_coords[1],

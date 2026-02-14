@@ -7,7 +7,7 @@ import logging
 from model.predrnn_inference import PredRNNInference
 from Astarinference import astar_search
 from visualisation.map import generate_latlon_grid, generate_synthetic_wind_field
-from data.grib_loader import denormalize_wind, _load_grib
+from data.grib_loader import denormalize_wind, _load_grib,_load_mean_std
 from data.grib_loader import get_wind_history_for_region
 from data.grib_loader import get_wind_field_for_display
 
@@ -54,30 +54,6 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-def get_grib_bounds():
-    """
-    Get the geographic bounds of the GRIB file to check coverage.
-    Returns the latitude and longitude ranges available in the GRIB data.
-    """
-    try:
-        wind, grib_lat, grib_lon, grib_times = _load_grib()
-        return {
-            "status": "success",
-            "bounds": {
-                "lat_min": float(grib_lat.min()),
-                "lat_max": float(grib_lat.max()),
-                "lon_min": float(grib_lon.min()),
-                "lon_max": float(grib_lon.max())
-            },
-            "time_range": {
-                "start": str(grib_times[0]) if len(grib_times) > 0 else None,
-                "end": str(grib_times[-1]) if len(grib_times) > 0 else None,
-                "num_timesteps": int(len(grib_times))
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error getting GRIB bounds: {e}")
-        raise HTTPException(status_code=500, detail=f"Error loading GRIB file: {str(e)}")
 
 @app.get("/grib-bounds")
 def get_grib_bounds():
@@ -212,8 +188,7 @@ def optimize_route(req: RouteRequest):
             wind_raw = np.stack(
                 [np.stack([u_syn, v_syn], axis=0)] * Tin, axis=0
             ).astype(np.float32)
-            mean = np.load("data/processed/mean.npy")
-            std = np.load("data/processed/std.npy")
+            mean,std = _load_mean_std()
             wind_history = (wind_raw - mean) / (std + 1e-6)
         except Exception as e:
             # Other errors (file not found, parsing errors, etc.)

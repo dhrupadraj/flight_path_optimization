@@ -1,0 +1,25 @@
+{
+  "include": [
+    "app.py",
+    "visualisation"
+  ],
+  "exclude": [
+    "api.py",
+    "Astarinference.py",
+    "model",
+    "data",
+    "checkpoints",
+    "notebooks",
+    "venv"
+  ],
+  "venvPath": ".",
+  "venv": "venv",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "."
+      ]
+    }
+  ]
+}
