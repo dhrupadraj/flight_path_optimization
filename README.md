@@ -112,16 +112,6 @@ Returns `{"status": "ok"}` when the API is available.
 Computes an optimized flight path between departure and arrival points using wind-aware routing (ERA5/GRIB data with synthetic fallback).  
 Returns optimized waypoints, direct route, waypoint count, selected data source, and region bounds.
 
-Request body:
-```json
-{
-  "dep_lat": 19.076,
-  "dep_lon": 72.8777,
-  "arr_lat": 28.6139,
-  "arr_lon": 77.209,
-  "departure_time": "10:30:00",
-  "flight_date": "2026-02-14"
-}
 ### `GET /grib-bounds`
 Returns geographic and time coverage of the loaded GRIB dataset.
 Useful to verify whether requested routes are inside available weather-data bounds.
