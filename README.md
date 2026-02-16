@@ -8,8 +8,9 @@ The system combines spatiotemporal weather forecasting using PredRNN and reverse
 
 ## Live streamlit Application
 
-[backend api](http://16.176.208.177:8000)
-[streamlit app](https://dhrupadraj-flight-path-optimization-app-3vctir.streamlit.app/)
+click here for backend api link[backend api link](http://16.176.208.177:8000/docs)
+
+click here for streamlit application link --> [streamlit app link](https://dhrupadraj-flight-path-optimization-app-3vctir.streamlit.app/)
 
 ---
 
