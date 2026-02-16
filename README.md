@@ -172,7 +172,8 @@ Ongoing improvements:
 * Multi‑altitude optimization
 
 ---
-
+## Note
+  ERA5 grib dataset is not included in the git Repo due to its large size(>250 MB)
 ## Author
 
 Dhrupad Raj
